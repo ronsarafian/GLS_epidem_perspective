@@ -1,0 +1,1169 @@
+---
+title: A Generalized Least Squares approach for PM estimation
+subtitle:  An Epidemiological Perspective
+author:  Ron Sarafian
+runtime: shiny
+output:
+  ioslides_presentation:
+    css: styles.css
+    logo: bgu.png
+    mathjax: default
+    smaller: yes
+    transition: slower
+    widescreen: yes
+    incremental: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include = F}
+library(sp)
+library(gstat)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(MASS)
+library(reshape2)
+library(data.table)
+library(leaflet)
+library(plotly)
+```
+
+
+## How does Air pollution affect health?
+
+### Observational study
+
+ - <span style="color:#FF4500"> **Requires:**</span> Accurate data of air pollution concentration levels and appropriate health data
+
+ - <span style="color:#FF4500">**Exists:**</span> Air pollution (PM) monitoring stations measurements (Spatially limited)
+
+<div class="columns-2">
+
+  ![](pm.png)
+
+<br/>
+
+**PM:** *Microscopic solid or liquid matter suspended in Earth's atmosphere. They have impacts on climate and precipitation that adversely affect human health.*
+
+</div>
+
+ - <span style="color:#FF4500">**Difficulty:**</span> Monitoring station limited spatial coverage
+ - <span style="color:#FF4500">**Solution:**</span> Predict PM to units (e.g. spatial units) without measurements
+
+
+
+
+## A typical research structure:
+
+The PM predictions that were generated at the *Geographic stage* serve as predictors at the *Epidemiologic stage*:
+
+#### **Geographic stage**
+
+$$y_i = f(x_i) + \varepsilon_i \qquad \rightarrow \qquad  \hat{y_j} = \hat{f}(x_j)$$
+
+#### **Epidemiologic stage**
+
+$$z_j = g(\hat{y}_j) + \nu_j$$
+where:
+
+  - $y_i$ is PM exposure measurement for observation $i$
+  - $f$ is some model that can be estimated using data
+  - $x_i$ is vector of predictors including spatio-temporal measurements (AOD) for observation $i$
+  - $z_j$ is health measurement of observation $j$
+  - $\varepsilon_i$ and $\nu_j$ are error terms with unknown pattern
+
+
+
+
+## Generating PM data
+
+### <span style="color:#FF4500"> **Interpolation** methods </span> 
+
+- **Nearest-neighbor** interpolation
+- **Inverse Distance Weighted** (IDW)
+- **Kriging** (Gaussian based model and smoothness minimizer splines)
+
+Drawback: **Accuracy**
+
+### <span style="color:#FF4500"> Using external **Spatial** information </span> 
+
+- **Land Use Regression** (LUR): data points consist spatial information other than geographic coordinates.
+
+More accurate, but **Temporaly limited**
+
+
+
+
+## Generating PM data
+
+### <span style="color:#FF4500"> Using external **Spatio-temporal** information </span>
+
+Advantages: **High accuracy, Unlimited coverage (space and time)**
+
+- <span style="color:#FF4500">**Aerosol Optical Depth (AOD)**</span> is associated with **ground PM measurements** in different spatial areas
+- Therefore, considered as a **good spatio-temporal predictor**.
+
+<div class="columns-2">
+   
+<iframe width="50" 
+src="https://svs.gsfc.nasa.gov/vis/a010000/a012300/a012302/MODIS_Aerosol_Optical_Depth_large.mp4" frameborder="0" allowfullscreen>
+  </iframe>
+
+<br/>
+
+**AOD:** *measures the light extinction by aerosol scattering and its absorption in the atmospheric column*
+
+
+
+
+
+## Challenges
+
+### Epidemiological Goal
+
+ - **PM predictions** are essentially predictors in an **Epidemiological study**. Should this affect:
+    + **Performance evaluation**
+    + **Learning algorithm**
+
+### Spatio-temporal data structure
+
+ - Geographical data observations are usually **highly correlated**. 
+    + Ignoring dependency structure may impair PM **prediction accuracy**
+
+
+
+
+
+## In the next minutes I will try to convince you that:
+
+### <span style="color:#FF4500"> **From an Epidemiological perspective:**</span>
+
+<br/>
+
+#### \ \ \ \ \ 1. We should greatly care about the procedure of **Geographical model \ \ \ \ \ \ \ \ \ performance estimation**.
+
+<br/>
+
+#### \ \ \ \ \ 2. We would like to **Improve Geographical predictions** by modeling the \ \ \ \ \ \ \ \ \ dependence structure.
+
+
+
+
+## Performance Estimation
+
+
+
+
+## Performance Estimation
+
+Why it's important to correctly estimate the model performance?
+
+ - To understand the quality of the model **on the scale that interests us**
+ - To **train** the model **on this basis**
+
+The quality of a Geographical model $f$ can be measured by its <span style="color:#FF4500"> **Loss functions** </span>: $\mathcal{L}(f): \mathcal{F} \to \mathbb{R^+}$.
+
+Today, PM model performance are typically estimated with the following Loss functions:
+
+- **RMSE**
+- **R-squared** from Observed - Predicted regression
+- **slope** from Observed - Predicted regression
+- more...
+
+
+
+
+## Performance Estimation
+
+However...
+
+### Ultimate goal is not PM prediction accuracy, but the the **Epidemiological results reliability**.
+
+<br/>
+
+### Therefore, <span style="color:#FF4500"> The Loss Function **has to recognize** this goal! </span>
+
+
+
+## The Loss Function
+
+**A City-Village illustration: Influence of Loss function selection on epidemiological results**
+
+<div class="row">
+  <div class="col-sm-9">
+
+100 PM monitoring stations:
+
+- 99 extremely correlated stations in a dense **city**
+- 1 station in a small, remote **village**
+
+Geographical model:
+
+- **Observed**: $y$ - a $\small 1 \times 100$ vector of PM measurements
+- **Predicted**: $\hat{y} = \hat{f}(x)$, where $x$ is some exogenous data (i.e. AOD)
+
+</div>
+
+  <div class="col-sm-3">
+
+```{r, fig.align='right',fig.width=2.5,fig.height=2.5}
+set.seed(1)
+coord <- data.frame(x = c(rnorm(99, 0.25, 0.05), 0.75),
+                    y = c(rnorm(99, 0.75, 0.05), 0.25))
+ggplot(data = coord, aes(x=x,y=y)) + geom_point(size = 1, alpha = 0.5) + 
+  coord_fixed() + xlim(0,1) + ylim(0,1) + 
+  annotate("text", label = c("City","Village"),
+           x = c(0.4,0.8), y = c(0.9,0.35), size = 5, colour = "#FF4500") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        plot.margin = unit(c(0,0,0,0), "cm"))
+```
+
+</div>
+
+Consider two Loss functions differing in errors **weighting scheme**:
+
+- <span style="color:	#FF4500"> *Quadratic Loss* </span>: $\mathcal{L}_I = \big(y-\hat{f}(x)\big)' I \big(y-\hat{f}(x)\big)$
+- <span style="color:	#FF4500"> *Precisioned Loss* </span>: $\mathcal{L}_{\Sigma^{-1}} = \big(y-\hat{f}(x)\big)' \Sigma^{-1} \big(y-\hat{f}(x)\big)$
+
+where $\small \Sigma^{-1}$ is the inverse of the errors covariance matrix.
+
+
+
+
+## The Loss Function
+
+<div class="row">
+  <div class="col-sm-9">
+
+**How do Geographical predictions look like?**
+
+- <span style="color:	#FF4500"> *Quadratic Loss* </span>: $\mathcal{L}_I = \big(y-\hat{f}(x)\big)' I \big(y-\hat{f}(x)\big)$
+- <span style="color:	#FF4500"> *Precisioned Loss* </span>: $\mathcal{L}_{\Sigma^{-1}} = \big(y-\hat{f}(x)\big)' \Sigma^{-1} \big(y-\hat{f}(x)\big)$
+
+</div>
+  
+  <div class="col-sm-3">
+
+```{r, fig.align='center',fig.width=2,fig.height=2}
+set.seed(1)
+coord <- data.frame(x = c(rnorm(99, 0.25, 0.05), 0.75),
+                    y = c(rnorm(99, 0.75, 0.05), 0.25))
+ggplot(data = coord, aes(x=x,y=y)) + geom_point(size = 1, alpha = 0.5) + 
+  coord_fixed() + xlim(0,1) + ylim(0,1) + 
+  annotate("text", label = c("City","Village"),
+           x = c(0.4,0.8), y = c(0.9,0.35), size = 5, colour = "#FF4500") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        plot.margin = unit(c(0,0,0,0), "cm"))
+```
+
+</div>
+
+Under $\mathcal{L}_I$ the model would be **very accurate in the city**, but at the cost of **village inaccuracy**.
+
+More Generally, with $\mathcal{L}_I$, areas with many **similar observations** (usually populated areas) have higher impact on the model, in relation to areas with **fewer observation**. Prediction accuracy will be accordingly.
+
+$\mathcal{L}_{\Sigma^{-1}}$ is forcing the model to utilize the errors correlation structure. Hence, **predictions accuracy for uncorrelated areas would increase**.
+
+
+
+
+
+## The Loss Function
+
+So, which Loss function to chose? <span style="color:#FF4500">It depends on **what the goal is!**</span>
+
+Typical epidemiological studies compare health indices in places experiencing different PM exposure levels to **estimate the effect of air pollution** on health:
+
+$$z_j = \alpha {\hat{y}}_j + \kappa_j + \epsilon_j \qquad j = \{City, Village\}$$
+
+In this case, the epidemiologist prefers that the generated PM predictions would be **accurate in the village just as it is accurate in the city**.
+
+<br/>
+
+Therefore, from an epidemiological perspective <span style="color:#FF4500"> the **Precisioned Loss** is much more suitable </span>
+
+
+
+
+
+## The Loss Function
+
+More generally, an <span style="color:#FF4500"> **optimal Geographic Loss** </span> is a function under which, the geographic predictions that serve as covariates in epidemiological study, are those that <span style="color:#FF4500"> minimize the distant between **Epidemiological Losses**</span> computed with real and estimated PM effect.
+
+i.e:
+
+$$\mathcal{L}_{(ge)}^* = \underset{\mathcal{L}_{(ge)}}{\arg\min}
+    \left \{ \mathbb{E} [\mathcal{L}_{(ep)}(\alpha) - 
+    \mathcal{L}_{(ep)}(\hat\alpha_{\mathcal{L}_{(ge)}})] \right \} $$
+
+where $\small (ge)$ indicate the geographic stage, $\small (ep)$ indicate the epidemiological stage, and $\hat{\alpha}_{\mathcal{L_{(ge)}}}$ is the estimator for $\alpha$ when $\mathcal{L_{(ge)}}$ is the geographic loss
+
+
+
+## Dependence Modeling
+
+## Dependence Modeling
+
+Why it's important to model the data dependence structure?
+
+<br />
+
+- Because ignoring it lead to inefficient estimates and <span style="color:#FF4500"> **bad predictions at the geographic stage** </span>.
+
+<br />
+
+- Also, Prediction errors may be spatio-temporally correlated
+    + Predictions serve as **epidemiological covariates**
+    + $\Rightarrow$ Therefore, **Geographical** *prediction errors* are **Epidemiological** *error in variables*
+    + $\qquad \Rightarrow$ <span style="color:#FF4500"> **Biased epidemiological results** </span> and erroneous conclusions
+
+<br />
+
+
+
+
+## Dependence Modeling - Mixed Model
+
+The **Linear Mixed Effect (LME)** model can be written as:
+
+$$y_j  = X_j \beta + Z_j b_j + \varepsilon_j 
+    \qquad j = 1,...,T $$
+
+where:
+
+- $j$ indicates a cluster and $s_j$ is the number of observations it;
+- $T$ is the number of clusters and $N = \sum_{j=1}^T s_j$;
+- $y_j$ is an $s_j \times 1$ vector of responses of the $j$th cluster;
+- $X_j$ is a $s_j \times m$ design matrix of fixed effects;
+- $\beta$ is an $m \times 1$ fixed effects coefficients;
+- $Z_j$ is an $s_j \times k$ design matrix of random effects;
+- $b_j$ is an $k \times 1$ random effects coefficients with mean zero and covariance matrix $\sigma^2 D$ (usually assumed fixed);
+- $\varepsilon_j$ is an $s_j \times 1$ *iid* error terms vector with mean zero and variance $\sigma^2$. 
+
+
+
+
+## Dependence Modeling - Mixed Model
+
+In a matrix form:
+
+$$y = X\beta + Zb + \varepsilon \quad = \quad X\beta + \eta$$
+
+where,
+
+$$\eta = \begin{bmatrix} \eta_1 \\ \vdots \\ \eta_T \end{bmatrix} = 
+              \begin{bmatrix} \varepsilon_1 + Z_1b_1 \\ \vdots \\ \varepsilon_T + Z_T b_T       \end{bmatrix}$$ 
+
+LME assumptions:
+
+- $\mathbb{E}(\eta) = 0$
+- $\mathbb{V}\text{ar}(\eta) = V = 
+    \begin{equation}
+    V_{N \times N} = \sigma^2  \begin{bmatrix} 
+                            I_{s_{1}} + Z_1DZ_1' & 0 & 0 & 0 \\
+                            0 & I_{s_{2}} + Z_2DZ_2' & 0 & 0 \\
+                            \vdots & \vdots & \ddots & \vdots \\
+                            0 & 0 & \dots & I_{s_{T}} + Z_TDZ_T' 
+                    \end{bmatrix}
+    \end{equation}$
+
+
+
+
+## Dependence Modeling - GLS
+
+### Why GLS? 
+
+- Allows a <span style="color:#FF4500"> **generalized dependence modeling scheme** </span> (not limited to a specific dependence structure)  
+- GLS is the <span style="color:#FF4500"> **minimizer** </span> of the the <span style="color:#FF4500"> **Precisioned Loss function** </span> (Mahalanobis norm) of the residual vector: $\hat{\beta}_{GLS} =\underset{\beta}{\arg\min} \left \{ (y-X\beta)^{-1} \Sigma^{-1} (y-X\beta) \right \}.$
+- May ease <span style="color:#FF4500"> **computational complexity** </span> 
+
+### How does GLS work?
+
+The GLS extends the Gauss–Markov theorem to the case where the covariance of the error terms is not a scalar matrix:
+
+$$\hat{\beta}_{GLS}(\Sigma) = (X'\Sigma^{-1}X)^{-1} X'\Sigma^{-1}y$$
+
+However, $\Sigma$ is usually unknown and is replaced with its estimated value. This practice is sometimes referred as **Feasible Generalized Least Squares (FGLS)**:
+
+
+
+
+## Demonstration: Geographic Estimation Procedure and Epidemiological Results
+
+```{r, echo=FALSE}
+ui <- fluidPage(
+        sidebarLayout(
+        sidebarPanel(
+            sliderInput("N", "Number of days:",min = 1,max = 150,step = 1,value = 30),
+            sliderInput("S","Number of spatial units:",min = 1,max = 20,step = 1,value = 4),
+            sliderInput("rho","rho:",min = 0.01,max = 1,step = 0.01,value = 0.85),
+            sliderInput("b1","b1:",min = 0.01,max = 2,step = 0.01,value = 1)
+        ),
+        
+        mainPanel(
+            plotOutput("distPlot")
+        )
+    )
+)
+
+server <- function(input, output) {
+    
+    output$distPlot <- renderPlot({
+        
+        seed <- 1
+        rho <- input$rho
+        sigma <- 1
+        N <- input$N
+        S <- input$S
+        beta <- 1
+        alpha <- -1
+        omega <- 1
+        psi <- 1
+        b1 <- input$b1
+        b2 <- 1
+
+        set.seed(seed)
+        
+        pow <- abs(outer(1:N, 1:N, "-"))
+        Temp <- (sigma^2/(1-rho^2)) * rho^pow
+        
+        plot1 <- ggplot(melt(Temp[N:1,1:N]), aes(Var1,Var2, fill=value)) + geom_raster() +
+            labs(title = "Error Temporal covariance matrix", x = "", y = "") +
+            scale_fill_continuous(guide = FALSE) +
+            theme(axis.text        = element_blank(),
+                  axis.ticks       = element_blank(),
+                  axis.title       = element_blank(),
+                  panel.background = element_blank()) 
+        
+        coord <- data.frame(lat = runif(S), long = runif(S))
+        dists <- as.matrix(dist(coord, diag = T))
+        
+        Spat <- b1 * exp((-1/b2) * dists)
+        
+        plot2 <- ggplot(coord, aes(y=long, x = lat, label = 1:S)) +
+            labs(title = "Locations of Spatial Units", x = "", y = "") +
+            geom_label() + xlim(0,1) + ylim(0,1) +
+            theme(axis.text        = element_blank(),
+                  axis.ticks       = element_blank(),
+                  axis.title       = element_blank())
+    
+        plot3 <- ggplot(melt(Spat), aes(Var1,Var2, fill=value)) + geom_raster() +
+            labs(title = "Error Spatial Covariance Matrix", x = "", y = "") +
+            scale_fill_continuous(guide = FALSE) +
+            theme(axis.text        = element_blank(),
+                  axis.ticks       = element_blank(),
+                  axis.title       = element_blank(),
+                  panel.background = element_blank()) + scale_y_reverse()
+                
+        
+        Sigma <- Spat %x% Temp
+        Sigma.inv <- solve(Sigma)
+        
+        plot4 <- ggplot(melt(Sigma[(S*N):1,1:(S*N)]), aes(Var1,Var2, fill=value)) +
+            labs(title = "Error Covariance Matrix", x = "", y = "") +
+            scale_fill_continuous(guide = FALSE) +
+            theme(axis.text        = element_blank(),
+                  axis.ticks       = element_blank(),
+                  axis.title       = element_blank(),
+                  panel.background = element_blank()) + geom_raster()
+        
+        epsilon <- mvrnorm(n = 1, mu = rep(0,S*N), Sigma = Sigma)
+        df <- data.frame(t = rep(1:N,S), epsilon, s = gl(S,N))
+        
+        plot5 <- ggplot(data = df, aes(y = epsilon, x = t)) +
+            labs(title = "epsilon", x = "time", y = "") + geom_line() + facet_grid(s~.) +
+            theme(axis.ticks = element_blank())
+        
+        df$aod.train <- rnorm(N*S,0,psi)
+        #df$aod.train <- 4*(rbinom(S*N, 1, 0.9)-0.5)
+        
+        df$pm.train <- beta * df$aod.train + df$epsilon
+        
+        X.train <- cbind(1,df$aod.train)
+        
+        beta.ols <- solve(t(X.train) %*% X.train, t(X.train) %*% df$pm.train)
+        beta.gls <- solve(t(X.train) %*% Sigma.inv %*% X.train, t(X.train) %*% Sigma.inv %*% df$pm.train)
+        
+        plot8 <- ggplot(data = df, aes(y = pm.train, x = aod.train)) + geom_point(alpha = 0.5) +
+            geom_abline(intercept = c(0, beta.ols[1], beta.gls[1]),
+                        slope = c(beta, beta.ols[2], beta.gls[2]),
+                        size = c(1,1,1),
+                        colour = c("black", "blue", "red")) + 
+            labs(title = "Geog. Model: pm~aod", x = "aod", y = "pm")
+        
+        df$epsilon.test <- mvrnorm(n = 1, mu = rep(0,S*N), Sigma = Sigma)
+        #df$aod.test <- 4*(rbinom(S*N, 1, 0.9)-0.5)
+        df$aod.test <- rnorm(N*S,0,psi)
+        df$pm.test <- beta * df$aod.test + df$epsilon.test
+        
+        X.test <- cbind(1,df$aod.test)
+        
+        df$pmh.ols <- X.test %*% beta.ols
+        df$pmh.gls <- X.test %*% beta.gls 
+        
+        df$nu <- rnorm(N*S, mean = 0, sd = omega)
+        df$z <- alpha * df$pm.test + df$nu
+        
+        em.ols <- lm(data = df, z~pmh.ols)
+        em.gls <- lm(data = df, z~pmh.gls)
+        
+        df.melt1 <- data.frame(z = rep(df$z,2),
+                               pm = c(df$pm.test, df$pmh.ols),
+                               based = c(rep("real",S*N),rep("OLS based",S*N)))
+        
+        df.melt2 <- data.frame(z = rep(df$z,2),
+                               pm = c(df$pm.test, df$pmh.gls),
+                               based = c(rep("real",S*N),rep("GLS based",S*N)))
+        
+        plot11 <- ggplot(data = df.melt1, aes(y = z, x = pm, colour = based)) + geom_point(alpha = 0.5) +
+            scale_color_manual(values=c("blue","black")) +
+            geom_abline(intercept = c(0, em.ols$coefficients[1]), 
+                        slope = c(alpha, em.ols$coefficients[2]),
+                        size = c(1,1),
+                        colour = c("black","blue")) + 
+            labs(title =  expression(paste("Epidm. model: z~",hat(pm))), x = "pm") +
+            theme(legend.position="bottom",
+                  legend.text=element_text(size=12),
+                  legend.title=element_blank(),
+                  legend.margin=margin(0,0,0,0),
+                  legend.box.margin=margin(-10,-10,-10,-10))
+        
+        plot12 <- ggplot(data = df.melt2, aes(y = z, x = pm, colour = based)) + geom_point(alpha = 0.5) +
+            scale_color_manual(values=c("red","black")) +
+            geom_abline(intercept = c(0, em.gls$coefficients[1]), 
+                        slope = c(alpha, em.gls$coefficients[2]),
+                        size = c(1,1),
+                        colour = c("black","red")) + 
+            labs(title =  expression(paste("Epidm. model: z~",hat(pm))), x = "pm") +
+            theme(legend.position="bottom",
+                  legend.text=element_text(size=12),
+                  legend.title=element_blank(),
+                  legend.margin=margin(0,0,0,0),
+                  legend.box.margin=margin(-10,-10,-10,-10))
+        
+        results <- data.frame(bias = abs(c(alpha - em.ols$coefficients[2],
+                                           alpha - em.gls$coefficients[2])),
+                              based = c("OLS","GLS"))
+        
+        plot13 <- qplot(x = based, y = bias, data = results) + geom_col() +
+            coord_cartesian(ylim = c(0, 1)) +
+            labs(title = "Bias of estimated pm effect")
+        
+        grid.arrange(plot2,plot3,plot1,plot4,plot5,plot8,plot11,plot12,plot13)
+        
+    },
+    width = 600, height = 450)
+    
+}
+
+# Run the application 
+
+shinyApp(ui = ui, server = server, options = list(height = 800))
+```
+
+
+
+
+## Demonstration: Geographic Estimation Procedure and Epidemiological Results
+
+
+<div class="row">
+  <div class="col-sm-6">
+
+![](rho.png)
+</div>
+  
+  <div class="col-sm-6">
+
+  ![](b1.png)
+  
+</div>
+
+
+
+
+
+## Dependence Modeling - The Errors Variance-covariance Matrix
+
+- Regression models differ by the definition of the **dependence structure** through the **covariance matrix** of the residuals terms. Hence, <span style="color:#FF4500"> GLS **includes as its special** cases various specific models, </span> such as the LME.
+
+<br/>
+
+- We propose to take advantage of the **Spatio-temporal pattern of the data** to characterize such matrices.
+
+
+
+
+
+## Dependence Modeling - The Errors Variance-covariance Matrix
+
+
+In this stage we focus on:
+
+- Parameterized matrices: $\Sigma(\theta)$, where $\theta \in \mathbb{R}^q$ and $q \in \{ 1, ..., N(N + 1)/2 \}.$
+- Stationary covariance process.
+
+**Note:** any parameterized covariance can be considered as a compromise between: 
+
+$$\Sigma_{s}(\theta) = 
+\sigma^2    \begin{bmatrix} 1      & 0     & \dots & 0 \\
+                            0      & 1     &       &   \\
+                            \vdots &       & \ddots&   \\
+                            0      &       & \dots & 1                   
+            \end{bmatrix} 
+\quad \text{and} \quad 
+\Sigma_{u}(\theta) = 
+    \begin{bmatrix}
+        \sigma_1^2      & \sigma_{1,2}  & \dots     & \sigma_{1,n}  \\
+        \sigma_{2,1}    & \sigma_2^2    &           &               \\
+        \vdots          &               & \ddots    & \vdots        \\
+        \sigma_{n,1}    &               & \dots     & \sigma_n^2
+    \end{bmatrix}$$
+
+including the LME block diagonal covariance structure...
+
+
+
+
+## Dependence Modeling - The Errors Variance-covariance Matrix
+
+Examples of Estimation approaches:
+
+<div class="row">
+  <div class="col-sm-6">
+  
+<span style="color:#FF4500"> **Fixed in Space and Varying in Time:** </span>
+
+**AR(1):** 
+
+$\small \Sigma = I_S \otimes 
+        \tau^2  \begin{bmatrix}
+            1         & \rho      & \rho^2    &       & \rho^{T-1}  \\
+            \rho      & 1         & \rho      & \dots & \rho^{T-2}  \\
+            \rho^2    & \rho      & 1         &       & \rho^{T-3}  \\
+                      & \vdots    &           & \ddots& \vdots      \\
+            \rho^{T-1}&\rho^{T-2} &\rho^{T-3} &  \dots& 1
+                \end{bmatrix}$
+
+  </div>
+  
+  <div class="col-sm-6">
+
+<span style="color:#FF4500"> **Fixed in Time and Varying in Space:** </span>
+
+**Negative exponential:** 
+
+$\small \mathbb{C}\text{orr}( \varepsilon_{ij}, \varepsilon_{kl}) = b_1 \exp(- \frac{d_{ik}^a}{b_2}) \delta_{jl}$
+
+**Spherical:** 
+
+$\small \mathbb{C}\text{orr}(\varepsilon_{ij},\varepsilon_{kl}) =
+  \begin{cases}   
+    b_1 (1 - \frac{3 d_{ik}}{2b_2} + \frac{d_{ik}^3}{2b_2^3}) \delta_{jl} & ,0 \le d_{ik} < b_2   \\
+    0 & ,d_{ik} > b_2 
+  \end{cases}.$
+
+  </div>
+
+</div>
+
+<span style="color:#FF4500"> **Varying in Space and Time:** </span> We start with **Separable** covariance function (matrices **Kronecker product**).  **Nonseparable** functions will be studied further.
+
+**Note:** OLS residuals are frequently used as initial empirical error terms (then we may iterate).
+
+
+
+
+## Computational Challenge
+
+
+## Computational Challenge
+
+ - Today’s state-of-the-art satellite based PM models show impressive capabilities in **moderately scale** data. 
+ - However, when data is **much larger** (say, a global database), it is sometimes **impossible to fit** these models due to **computational limitation**.
+
+<br />
+
+To tackle the problem of data size we might want to:
+
+- <span style="color:#FF4500"> Apply **GLS** </span>
+- Take advantage of the <span style="color:#FF4500"> **Kronecker product** </span> matrices **scalable** characteristics 
+
+
+
+
+## Computational Challenge - Why GLS?
+
+The GLS **reduces the problem of model fitting** from a general optimization problem to the problem of <span style="color:#FF4500"> **solving a system of linear equations** </span>:
+
+ - In **LME**, $\beta_{LME}$ is achieved by maximizing the following log likelihood function:
+
+$$\small l(\beta,\sigma^2, D) =  -\frac{T}{2}\ln{2\pi} -\frac{1}{2} \biggl(
+          T \ln{\sigma^2} + \sum_{j=1}^T \bigl( \ln{|I+Z_jDZ_j'|} +
+                \sigma^2 (y_j-X_j\beta)'(I+Z_jDZ_j')^{-1}(y_j-X_j\beta) \bigl) 
+            \biggl) $$
+
+
+ - In **GLS**, $\beta_{GLS}$ is achieved by minimizing the sum of the squares (i.e. apply OLS) of the whitening data:
+
+$$ \small \begin{aligned}
+    \hat{\beta}_{GLS} &= (\tilde{X}'\tilde{X})^{-1}\tilde{X}'\tilde{y} \\
+                      &= (X'P'PX)^{-1} X'P'Py \\ 
+                      &= (X'\Sigma^{-1} X)^{-1} X'\Sigma^{-1}y.
+    \end{aligned}$$
+
+where: $\small \Sigma$'s Cholesky's decomposition is $\small \Sigma = L \Lambda L'$; $\small \Sigma^{-1} = PP'$; $\small P = L^{-1} \Lambda^{-\frac{1}{2}}$
+
+ - The GLS setting allows to <span style="color:#FF4500"> harness a **very rich literature** </span> that explores methods for solving such problems in **large data**.
+
+
+
+
+## Computational Challenge - Why GLS?
+
+ - GLS also allows to <span style="color:#FF4500"> **control computational difficulty** </span> through the decision on the error covariance matrix, by so, to **balance** between prediction **accuracy and computational complexity**.
+
+- For instance, the **precision matrix** is very likely to have a <span style="color:#FF4500"> sparse structure </span> therefore:
+    + Matrix can be **easily compressed**, and efficiently represented.
+    + we might enjoy Sparse matrix algorithms which **allow faster computation** (avoiding arithmetic operations on zero elements)
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+We might consider:
+
+ - Estimate the covariance matrix using some regularization-based **thresholding estimation**
+ - Chose a covariance **functional form** with simple sparse inverse structure.
+    + For instance, the inverse of the AR(1) based matrix is:
+
+</div>
+  
+  <div class="col-sm-6">
+
+<br />
+<br />
+
+$$ \scriptsize \Sigma^{-1} = I_S \otimes \frac{1}{\tau(1-\rho^2)}
+          \begin{bmatrix}
+              1       & -\rho     &           &           & 0     \\
+              -\rho   & 1+\rho^2  & \ddots    &           &       \\
+                      & \ddots    & \ddots    & \ddots    &       \\
+                      &           & \ddots    & 1+\rho^2  & -\rho \\
+              0       &           &           &  -\rho    & 1
+          \end{bmatrix}$$
+
+</div>
+
+
+
+
+## Computational Challenge - Why GLS?
+
+Another feature that we can take advantage of is to use a <span style="color:#FF4500"> Kronecker Product </span> covariance matrix structure.
+
+except being parsimonious in estimated parameters, a Kronecker assumption ease the "inversion" of the covariance matrix and other algebraic operations needed for model fitting:
+
+ - $(A \otimes B)^{-1} = A^{-1} \otimes B^{-1}$
+ - $|A \otimes B| = |A| |B|$
+ - $(A \otimes B)z = r \ \Leftrightarrow \ BZA' = R$
+ 
+
+
+## Regularization in GLS?
+
+
+
+## Demonstration: Building a Covariance matrix
+
+How to build the covariance matrix of the residual terms?
+
+<span style="color:#FF4500">**Iteratively:**</span>
+
+1. Start by training the model assuming no dependence structure (i.e. OLS)
+2. Get the residuals and estimate their covariance
+3. Train the model using the estimated covariance in a **GLS framework** 
+4. Return to 2 until convergence
+
+<br/>
+
+How to estimate the covariance at each step?
+
+Use <span style="color:#FF4500"> **Kronecker assumption:** </span> the process variance can be estimated separately in space and time
+
+1. Use the residuals to fit a spatial covariance model $\rightarrow$ find $\Sigma_{spt}$
+2. Use the residuals to fit a temporal covariance model $\rightarrow$ find $\Sigma_{tmp}$
+3. Set the complete covariance with a Kronecker product: $\Sigma = \Sigma_{spt} \otimes \Sigma_{tmp}$
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+### We will demonstrate the first step
+
+<br/>
+
+**Data**:
+
+- Space: 201 stations, Northeast US
+- Time: 2000-2015, daily (including missing values)
+- Measurements: PM, AOD and other spatial predictors 
+
+</div>
+
+  <div class="col-sm-6">
+  
+```{r, fig.align='right',fig.width = 5, fig.height = 4}
+coord <- read.csv("coord.csv")
+m <- leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng=coord$long.stn, lat=coord$lat.stn, popup=coord$stn, radius = 5)
+m
+```
+
+</div>
+
+
+
+
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+  
+### Spatial Covariance matrix
+
+<br/>
+
+We assume $\Sigma_{spt}$ is a <span style="color:#FF4500"> function of distance $d$:  </span>
+
+$$(\Sigma_{spt})_{ij} = \Sigma_{spt}\big( d(s_i,s_j) \big)$$
+<br/>
+
+Lets look at the sample means of **pairwise covariances** by distance:
+
+<br/>
+
+To guarantee that the spatial covariance matrix is **positive definite**, we can **charactrize** this relationship with a **parametrized** function. 
+
+</div>
+
+  <div class="col-sm-6">
+
+  ![](covdist.png)
+
+</div>
+
+
+
+
+
+## Building a Kronecker covariance matrix
+
+
+<div class="row">
+
+  <div class="col-sm-6">
+  
+### Spatial Covariance matrix
+
+We estimate the parameters of a well known distance based covariance function
+
+<span style="color:#FF4500"> **Negative exponential:** </span>
+
+$$Cov(s_i,s_j) =  Cov(d_{ij}) = b_1 \exp(- \frac{d_{ij}^{\alpha}}{b_2})$$
+it appears that the estimated parameters are: 
+
+$\small b_1= 4.92$ ; $\small b_2= 0.58$ ; $\small \alpha= 0.50$
+
+<br/>
+
+Now we can construct $\Sigma_{spt}(d;\alpha,b_1,b_2)$
+
+</div>
+
+  <div class="col-sm-6">
+
+</div>
+
+![](covdist_model.png)
+
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+### Spatial Covariance matrix
+
+<br/>
+
+Here, spatial units are arranged from west to east
+
+**Note:** This structure assume:
+
+- ***Stationarity*** in space - covariance can be represented as a function of the spatial difference between locations
+- ***Isotropy*** - uniformity in all orientations
+
+</div>
+
+  <div class="col-sm-6">
+
+```{r}
+Ms <- read.csv("spt_par.csv")[,-1] %>% as.matrix()
+ns <- dim(Ms)[1]
+ui <- fluidPage(
+  mainPanel(
+    plotlyOutput("heatmap", width = "430px", height="430px")
+  )
+)
+
+server <- function(input, output) {
+  output$heatmap <- renderPlotly({plot_ly(z = Ms[ns:1,], type = "heatmap", showscale=FALSE)})
+}
+shinyApp(ui,server)
+```
+
+</div>
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+### Spatial Covariance matrix 
+
+**Sparse version:**
+
+Why Sparse?
+
+- Reduces **Computational difficulty** of model fitting 
+- As a **Regularization tool** it can enhance prediction accuracy (remember the LASSO regression)
+
+<br/>
+
+Sparsity threshold can be determined in different ways, e.g. parametricly.
+
+</div>
+
+  <div class="col-sm-6">
+
+![](sptmat_model_0.png)
+
+</div>
+
+
+
+
+## Building a Kronecker covariance matrix
+
+### Temporal Covariance matrix
+
+We would like to model the PM residual terms within an <span style="color:#FF4500"> **Autoregressive Moving Average** (ARMA) </span> model:
+
+An ARMA(p,q) process is defined as follow:
+
+$$ \large e_t = c + \varepsilon_t + \sum_{i=1}^p \rho_i e_{t-i} + \sum_{i=1}^q \theta_i \varepsilon_{t-i}$$
+where:
+
+- $e_t$ and $\varepsilon_t$ are the residual and the noise at time $t$
+- $\rho_i$ and $\theta_i$ are the **AR** and **MA** parameters of order $i$
+
+<br/>
+
+**Note**: an ARMA model is appropriate only for **stationary** series!
+
+
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+### Temporal Covariance matrix
+
+<br/>
+
+This is a good point to check the **stationarity of the residuals**. A significant trend and seasonal component would indicate that the process is not stationary.
+
+<br/>
+
+We will not want to see here **neither trend nor seasonal effect** as it means that we missed them in in the fixed effects estimation.
+
+<br/>
+
+Here it seems that there is no significant trend and seasonal effects. To be sure, use **Unit root tests**.
+
+</div>
+
+  <div class="col-sm-6">
+
+![](decom.png)
+
+</div>
+
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+### Temporal Covariance matrix
+
+<br/>
+
+We find the **order of the ARMA model** and its suitable parameters using AIC/BIC.
+
+<br/>
+
+The **ARMA(1,0)** with $\rho= 0.26$ was best fitted:
+
+$$ e_t = 0.26 e_{t-1} + \varepsilon_t$$
+
+A **low ordered** ARMA may suggest we were able to **capture** most most of the dependence with **fixed effects**
+
+Here is a **one month** covariance matrix $\Sigma_{tmp}$:
+
+</div>
+
+  <div class="col-sm-6">
+
+```{r}
+Mt <- read.table("tmp_month.csv") %>% as.matrix()
+nt <- dim(Mt)[1]
+ui <- fluidPage(
+  mainPanel(
+    plotlyOutput("heatmap", width = "430px", height="430px")
+  )
+)
+
+server <- function(input, output) {
+  output$heatmap <- renderPlotly({plot_ly(z = Mt[nt:1,], type = "heatmap", showscale=FALSE)})
+}
+shinyApp(ui,server)
+```
+
+![](tmp_month_model.png)
+
+</div>
+
+
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+### Temporal Covariance matrix
+
+**Sparse version:**
+
+</div>
+
+  <div class="col-sm-6">
+
+![](tmp_month_model0.png)
+
+</div>
+
+
+
+
+## Building a Kronecker covariance matrix
+
+### The complete Covariance
+
+<div class="row">
+
+  <div class="col-sm-5">
+  
+![](sptmat_model_0_small.png)
+
+</div>
+
+  <div class="col-sm-1">
+
+  <br/>
+  <br/>
+  <br/>
+  <br/>
+  <br/>
+  <br/>
+  
+  $\Huge \ \otimes$ 
+   
+</div>
+
+  <div class="col-sm-5">
+
+![](tmp_month_model0_small.png)
+
+</div>
+
+
+
+## Building a Kronecker covariance matrix
+
+<div class="row">
+
+  <div class="col-sm-6">
+
+### The complete covariance
+
+<br/>
+
+**Note**: This structure recognizes all types of dependencies: Spatial, Temporal and Spatio-temporal
+
+<br/>
+
+The matrix is also guaranteed to be **positive definite**, therefore **invertible**
+
+<br/>
+
+The degree of Sparsity here is 97%. 
+
+</div>
+
+  <div class="col-sm-6">
+  
+![](sigma_month0.png)
+
+</div>
+
+
+
+## Compare LME GLS?
+
+
+
+## Thank you for your time!
