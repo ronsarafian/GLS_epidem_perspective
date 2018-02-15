@@ -147,7 +147,7 @@ src="https://svs.gsfc.nasa.gov/vis/a010000/a012300/a012302/MODIS_Aerosol_Optical
 
 <br/>
 
-#### \ \ \ \ \ 2. We would like to **Improve Geographical predictions** by modeling the \ \ \ \ \ \ \ \ \ dependence structure.
+#### \ \ \ \ \ 2. We would like to **Improve predictions** by modeling the dependence  \ \ \ \ \ \ \ \ \ structure.
 
 
 
@@ -163,6 +163,8 @@ Why it's important to correctly estimate the model performance?
 
  - To understand the quality of the model **on the scale that interests us**
  - To **train** the model **on this basis**
+
+<br/>
 
 The quality of a Geographical model $f$ can be measured by its <span style="color:#FF4500"> **Loss functions** </span>: $\mathcal{L}(f): \mathcal{F} \to \mathbb{R^+}$.
 
@@ -243,7 +245,9 @@ where $\small \Sigma^{-1}$ is the inverse of the errors covariance matrix.
 <div class="row">
   <div class="col-sm-9">
 
-**How do Geographical predictions look like?**
+**How do Geographical predictions look like under these loss functions?**
+
+<br/>
 
 - <span style="color:	#FF4500"> *Quadratic Loss* </span>: $\mathcal{L}_I = \big(y-\hat{f}(x)\big)' I \big(y-\hat{f}(x)\big)$
 - <span style="color:	#FF4500"> *Precisioned Loss* </span>: $\mathcal{L}_{\Sigma^{-1}} = \big(y-\hat{f}(x)\big)' \Sigma^{-1} \big(y-\hat{f}(x)\big)$
@@ -784,11 +788,8 @@ except being parsimonious in estimated parameters, a Kronecker assumption ease t
  
 
 
-## Regularization in GLS?
 
-
-
-## Demonstration: Building a Covariance matrix
+## Demonstration: Estimating a Covariance matrix
 
 How to build the covariance matrix of the residual terms?
 
@@ -810,7 +811,7 @@ Use <span style="color:#FF4500"> **Kronecker assumption:** </span> the process v
 3. Set the complete covariance with a Kronecker product: $\Sigma = \Sigma_{spt} \otimes \Sigma_{tmp}$
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -834,7 +835,7 @@ Use <span style="color:#FF4500"> **Kronecker assumption:** </span> the process v
 coord <- read.csv("coord.csv")
 m <- leaflet() %>%
   addTiles() %>%
-  addCircleMarkers(lng=coord$long.stn, lat=coord$lat.stn, popup=coord$stn, radius = 5)
+  addCircleMarkers(lng=coord$long.stn, lat=coord$lat.stn, popup=coord$stn, radius = 3)
 m
 ```
 
@@ -845,7 +846,7 @@ m
 
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -878,7 +879,7 @@ To guarantee that the spatial covariance matrix is **positive definite**, we can
 
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 
 <div class="row">
@@ -910,7 +911,7 @@ Now we can construct $\Sigma_{spt}(d;\alpha,b_1,b_2)$
 
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -926,6 +927,8 @@ Here, spatial units are arranged from west to east
 
 - ***Stationarity*** in space - covariance can be represented as a function of the spatial difference between locations
 - ***Isotropy*** - uniformity in all orientations
+
+(but these assumptions are supported by estimated distant covariance relationship)
 
 </div>
 
@@ -949,7 +952,7 @@ shinyApp(ui,server)
 </div>
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -966,7 +969,7 @@ Why Sparse?
 
 <br/>
 
-Sparsity threshold can be determined in different ways, e.g. parametricly.
+Sparsity threshold can be determined in different ways, e.g. hyperparametricly.
 
 </div>
 
@@ -979,28 +982,21 @@ Sparsity threshold can be determined in different ways, e.g. parametricly.
 
 
 
-## Building a Kronecker covariance matrix
+
+## Estimating a Kronecker covariance matrix
 
 ### Temporal Covariance matrix
 
-We would like to model the PM residual terms within an <span style="color:#FF4500"> **Autoregressive Moving Average** (ARMA) </span> model:
+- The temporal structure of the residual terms can be modeled using a <span style="color:#FF4500"> **time series analysis**</span>.
 
-An ARMA(p,q) process is defined as follow:
+- Kronecker assumption implies an estimation of **one temporal covariance function** that is suitable for all spatial units.
 
-$$ \large e_t = c + \varepsilon_t + \sum_{i=1}^p \rho_i e_{t-i} + \sum_{i=1}^q \theta_i \varepsilon_{t-i}$$
-where:
+- Therefore, we may want to look at **daily spatial averages**, and then model the covariance of this series.
 
-- $e_t$ and $\varepsilon_t$ are the residual and the noise at time $t$
-- $\rho_i$ and $\theta_i$ are the **AR** and **MA** parameters of order $i$
+- To get the sense of this process, a good thing to start with is looking at the time series decomposition.
+    + We will not want to see **neither trend nor seasonal effect** as they mean we missed something important in in the fixed effects estimation. 
 
-<br/>
-
-**Note**: an ARMA model is appropriate only for **stationary** series!
-
-
-
-
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -1008,17 +1004,19 @@ where:
 
 ### Temporal Covariance matrix
 
-<br/>
-
-This is a good point to check the **stationarity of the residuals**. A significant trend and seasonal component would indicate that the process is not stationary.
+Here is the process **Decomposition**:
 
 <br/>
 
-We will not want to see here **neither trend nor seasonal effect** as it means that we missed them in in the fixed effects estimation.
+It seems that trend and seasonal components **are not significant**.
 
 <br/>
 
-Here it seems that there is no significant trend and seasonal effects. To be sure, use **Unit root tests**.
+Non significant trend and seasonal component may indicate that the process is **stationary**, i.e. has statistical properties that do not change with time.
+
+<br/>
+
+* To be sure that stationary does exist we checked its **spectogram**, and considered tests such as the *Wavelet Spectrum Test*.
 
 </div>
 
@@ -1030,7 +1028,29 @@ Here it seems that there is no significant trend and seasonal effects. To be sur
 
 
 
-## Building a Kronecker covariance matrix
+
+
+## Estimating a Kronecker covariance matrix
+
+### Temporal Covariance matrix
+
+The <span style="color:#FF4500"> **Autoregressive–moving-average**</span> (ARMA) models are very common statistical tools providing a parsimonious description of a **stationary** stochastic process.
+
+We would like to model the PM residual terms within an ARMA(p,q) process as follow:
+
+$$ \large e_t = c  + \sum_{i=1}^p \rho_i e_{t-i} + \sum_{i=1}^q \theta_i \varepsilon_{t-i}+ \varepsilon_t$$
+where:
+
+- $e_t$ and $\varepsilon_t$ are the residual and the noise at time $t$
+- $\rho_i$ and $\theta_i$ are the **AR** and **MA** parameters of order $i$
+
+<br/>
+
+We can find the best **ARMA order** and its suitable parameters by minimizing the **AIC/BIC**.
+
+
+
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -1040,15 +1060,11 @@ Here it seems that there is no significant trend and seasonal effects. To be sur
 
 <br/>
 
-We find the **order of the ARMA model** and its suitable parameters using AIC/BIC.
-
-<br/>
-
 The **ARMA(1,0)** with $\rho= 0.26$ was best fitted:
 
 $$ e_t = 0.26 e_{t-1} + \varepsilon_t$$
 
-A **low ordered** ARMA may suggest we were able to **capture** most most of the dependence with **fixed effects**
+<br/>
 
 Here is a **one month** covariance matrix $\Sigma_{tmp}$:
 
@@ -1078,7 +1094,7 @@ shinyApp(ui,server)
 
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -1099,7 +1115,7 @@ shinyApp(ui,server)
 
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 ### The complete Covariance
 
@@ -1132,7 +1148,7 @@ shinyApp(ui,server)
 
 
 
-## Building a Kronecker covariance matrix
+## Estimating a Kronecker covariance matrix
 
 <div class="row">
 
@@ -1142,15 +1158,15 @@ shinyApp(ui,server)
 
 <br/>
 
-**Note**: This structure recognizes all types of dependencies: Spatial, Temporal and Spatio-temporal
-
-<br/>
+This structure recognizes all types of dependencies: Spatial, Temporal and Spatio-temporal
 
 The matrix is also guaranteed to be **positive definite**, therefore **invertible**
 
 <br/>
 
-The degree of Sparsity here is 97%. 
+We use this Covariance matrix within a GLS model to find residuals and iterate until convergence.
+
+The final Covariance matrix will be used to determine the **Precisioned Loss** $\mathcal{L}_{\Sigma^{-1}}$ with the aim of <span style="color:#FF4500"> **improving epidemiological results reliability**</span>.
 
 </div>
 
@@ -1160,9 +1176,6 @@ The degree of Sparsity here is 97%.
 
 </div>
 
-
-
-## Compare LME GLS?
 
 
 
